@@ -25,12 +25,11 @@ public class Program
 
     private static bool ShouldCompress(string path)
     {
-        switch (Path.GetExtension(path))
+        return Path.GetExtension(path) switch
         {
-            case ".unity":
-                return true;
-        }
-        return false;
+            ".unity" => true,
+            _ => false,
+        };
     }
 
     private static void PassThrough()
