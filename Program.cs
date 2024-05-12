@@ -326,6 +326,31 @@ public class Program
         byte[] startWord = Encoding.UTF8.GetBytes("serializedProgramAsset");
         int startWordIndex = 0;
 
+        byte[] utf8bom = [ 0xef, 0xbb, 0xbf ];
+        foreach (byte b in utf8bom)
+        {
+            // If this breaks out in the middle of a utf8 BOM then the parser should technically restart from the beginning.
+            // However if that is actually the case then chances are about 99.99999% that the yaml header does not exist either,
+            // therefore it'll all just get passed through anyway.
+            if (IsEndOfFile() || Peek() != b)
+                break;
+            Write(Next());
+        }
+        byte[] yamlHeader = Encoding.UTF8.GetBytes("%YAML");
+        foreach (byte b in yamlHeader)
+        {
+            if (IsEndOfFile() || Peek() != b)
+            {
+                while (inputIndex < inputSize)
+                    Write(inputBuffer[inputIndex++]);
+                FlushOutputBuffer();
+                if (!IsEndOfFile())
+                    PassThrough(inputStream, outputStream);
+                return; // Do not process any files that are not yaml files. Especially not binary files.
+            }
+            Write(Next());
+        }
+
         while (!IsEndOfFile())
         {
             byte current = Next();
