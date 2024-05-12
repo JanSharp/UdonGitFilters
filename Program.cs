@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 
 public class Program
@@ -105,7 +105,7 @@ public class Program
         var sevenZip = Process.Start(new ProcessStartInfo()
         {
             FileName = "7z",
-            ArgumentList = {"x", "-si", "-so", "-an", "-tgzip"},
+            ArgumentList = {"x", "-si", "-so", "-an", "-txz"},
             CreateNoWindow = true,
             UseShellExecute = false,
             RedirectStandardInput = true,
@@ -139,7 +139,7 @@ public class Program
         var sevenZip = Process.Start(new ProcessStartInfo()
         {
             FileName = "7z",
-            ArgumentList = {"a", "-si", "-so", "-an", "-tgzip"},
+            ArgumentList = {"a", "-si", "-so", "-an", "-txz"},
             CreateNoWindow = true,
             UseShellExecute = false,
             RedirectStandardInput = true,
