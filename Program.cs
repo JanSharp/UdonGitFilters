@@ -1,9 +1,14 @@
 ﻿using System.Diagnostics;
+using System.Net.Mime;
 using System.Text;
+using System.Text.RegularExpressions;
 
 public class Program
 {
     private const int BufferSize = 1024 * 1024;
+    private const int AssetBufferSize = 128 * 1024;
+    private const string UdonGraphScriptGuid = "4f11136daadff0b44ac2278a314682ab";
+    private const string UdonSharpScriptGuid = "c333ccfdd0cbdbc4ca30cef2dd6e6b9b";
 
     public static int Main(string[] args)
     {
@@ -41,6 +46,11 @@ public class Program
             ".prefab" => true,
             _ => false,
         };
+    }
+
+    private static bool IsAsset(string path)
+    {
+        return Path.GetExtension(path) == ".asset";
     }
 
     private static void PassThrough(Stream inputStream, Stream outputStream)
@@ -123,8 +133,8 @@ public class Program
 
     private static Action<Stream, Stream> GetCleanProcessor(string path)
     {
-        return ShouldRemoveReferences(path)
-            ? RemoveSerializedProgramAssetReferences
+        return ShouldRemoveReferences(path) ? RemoveSerializedProgramAssetReferences
+            : IsAsset(path) ? CleanUdonGraphAndUdonSharpAsset
             : PassThrough;
     }
 
@@ -376,5 +386,289 @@ public class Program
         }
 
         FlushOutputBuffer();
+    }
+
+    private static void CleanUdonGraphAndUdonSharpAsset(Stream inputStream, Stream outputStream)
+    {
+        byte[] inputBuffer = new byte[AssetBufferSize];
+        int inputSize = 0;
+        bool reachedEnd = false;
+        while (inputSize < AssetBufferSize)
+        {
+            int size = inputStream.Read(inputBuffer, inputSize, AssetBufferSize - inputSize);
+            if (size <= 0)
+            {
+                reachedEnd = true;
+                break;
+            }
+            inputSize += size;
+        }
+
+        void WriteAndPassThrough()
+        {
+            outputStream.Write(inputBuffer, 0, inputSize);
+            outputStream.Flush();
+            if (!reachedEnd)
+                PassThrough(inputStream, outputStream);
+        }
+
+        int i = 0;
+
+        byte[] utf8bom = [ 0xef, 0xbb, 0xbf ];
+        if (inputSize >= 3 && inputBuffer[0] == utf8bom[0] && inputBuffer[1] == utf8bom[1] && inputBuffer[2] == utf8bom[2])
+            i = 3;
+        byte[] yamlHeader = Encoding.UTF8.GetBytes("%YAML");
+        if (inputSize < i + 4
+            || inputBuffer[i + 0] != yamlHeader[0]
+            || inputBuffer[i + 1] != yamlHeader[1]
+            || inputBuffer[i + 2] != yamlHeader[2]
+            || inputBuffer[i + 3] != yamlHeader[3])
+        {
+            // Only process text files with the yaml header, others get passed through.
+            WriteAndPassThrough();
+            return;
+        }
+        i += 4;
+
+        string? scriptGuid = null;
+        string? name = null;
+        int? serializedUdonOpenCurly = null;
+        int? serializedUdonPostCloseCurly = null;
+        string? sourceCsFileId = null;
+        string? sourceCsGuid = null;
+        string? sourceCsType = null;
+
+        void ReadWhiteSpace()
+        {
+            while (i < inputSize
+                && (inputBuffer[i] switch
+                {
+                    (byte)' ' => true,
+                    (byte)'\t' => true,
+                    (byte)'\v' => true,
+                    (byte)'\r' => true,
+                    (byte)'\n' => true,
+                    _ => false,
+                }))
+            {
+                i++;
+            }
+        }
+
+        bool CheckField(byte[] field)
+        {
+            int startIndex = i;
+            if (startIndex + field.Length >= AssetBufferSize)
+                return false;
+            for (int j = 0; j < field.Length; j++)
+                if (inputBuffer[startIndex + j] != field[j])
+                    return false;
+            i += field.Length;
+            ReadWhiteSpace();
+            if (!TestNext((byte)':'))
+            {
+                i = startIndex;
+                return false;
+            }
+            return true;
+        }
+
+        bool TestNext(byte expected)
+        {
+            if (i >= inputSize || inputBuffer[i] != expected)
+                return false;
+            i++;
+            return true;
+        }
+
+        bool ReadUntil(byte closingByte)
+        {
+            while (i < inputSize)
+                if (inputBuffer[i++] == closingByte) // Consume regardless of the condition.
+                    return true;
+            return false;
+        }
+
+        byte[] scriptField = Encoding.UTF8.GetBytes("m_Script");
+        bool CheckScriptField()
+        {
+            if (!CheckField(scriptField))
+                return false;
+            ReadWhiteSpace();
+            if (!TestNext((byte)'{'))
+                return false;
+            int contentBegin = i;
+            if (!ReadUntil((byte)'}'))
+                return false;
+            string content = Encoding.UTF8.GetString(inputBuffer, contentBegin, i - contentBegin - 1);
+            Match match = Regex.Match(content, @"guid\s*:\s*([0-9a-zA-Z]+)");
+            if (!match.Success)
+                return false;
+            scriptGuid = match.Groups[1].Value.ToLower();
+            return true;
+        }
+
+        byte[] nameField = Encoding.UTF8.GetBytes("m_Name");
+        bool CheckNameField()
+        {
+            if (!CheckField(nameField))
+                return false;
+            ReadWhiteSpace();
+            int nameStart = i;
+            while (i < inputSize && inputBuffer[i] != (byte)'\n' && inputBuffer[i] != (byte)'\r')
+                i++;
+            name = Encoding.UTF8.GetString(inputBuffer, nameStart, i - nameStart);
+            if (name == "")
+                name = null;
+            return true;
+        }
+
+        byte[] serializedUdonProgramAssetField = Encoding.UTF8.GetBytes("serializedUdonProgramAsset");
+        bool CheckSerializedUdonProgramAssetField()
+        {
+            if (!CheckField(serializedUdonProgramAssetField))
+                return false;
+            ReadWhiteSpace();
+            int open = i;
+            if (!TestNext((byte)'{'))
+                return false;
+            if (!ReadUntil((byte)'}'))
+                return false;
+            serializedUdonOpenCurly = open;
+            serializedUdonPostCloseCurly = i;
+            return true;
+        }
+
+        byte[] sourceCsField = Encoding.UTF8.GetBytes("sourceCsScript");
+        bool CheckSourceCsField()
+        {
+            if (!CheckField(sourceCsField))
+                return false;
+            ReadWhiteSpace();
+            if (!TestNext((byte)'{'))
+                return false;
+            int contentBegin = i;
+            if (!ReadUntil((byte)'}'))
+                return false;
+            string content = Encoding.UTF8.GetString(inputBuffer, contentBegin, i - contentBegin - 1);
+            Match match = Regex.Match(content, @"fileID\s*:\s*([0-9]+)\s*,\s*guid\s*:\s*([0-9a-zA-Z]+)\s*,\s*type\s*:\s*([0-9]+)");
+            if (!match.Success)
+                return false;
+            sourceCsFileId = match.Groups[1].Value;
+            sourceCsGuid = match.Groups[2].Value;
+            sourceCsType = match.Groups[3].Value;
+            return true;
+        }
+
+        bool checkForFieldStart = false;
+
+        while (i < inputSize)
+        {
+            byte current = inputBuffer[i];
+
+            if (!checkForFieldStart)
+            {
+                checkForFieldStart = current == (byte)'\n';
+                i++;
+                continue;
+            }
+
+            switch (current)
+            {
+                case (byte)'\r':
+                case (byte)' ':
+                case (byte)'\t':
+                case (byte)'\v':
+                    i++;
+                    continue;
+            }
+
+            checkForFieldStart = false;
+            if (CheckScriptField())
+            {
+                if (scriptGuid != UdonGraphScriptGuid && scriptGuid != UdonSharpScriptGuid)
+                {
+                    WriteAndPassThrough();
+                    return;
+                }
+                continue;
+            }
+            if (CheckNameField())
+                continue;
+            if (CheckSerializedUdonProgramAssetField())
+                continue;
+            if (CheckSourceCsField())
+                continue;
+            i++;
+        }
+
+        if (scriptGuid == null)
+        {
+            WriteAndPassThrough();
+            return;
+        }
+
+        if (scriptGuid == UdonGraphScriptGuid)
+        {
+            if (serializedUdonOpenCurly == null)
+            {
+                WriteAndPassThrough();
+                return;
+            }
+            // Set 'serializedUdonProgramAsset' to '{fileID: 0}'.
+            outputStream.Write(inputBuffer, 0, serializedUdonOpenCurly.Value);
+            outputStream.Write(Encoding.UTF8.GetBytes("{fileID: 0}"));
+            outputStream.Write(inputBuffer, serializedUdonPostCloseCurly!.Value, inputSize - serializedUdonPostCloseCurly.Value);
+            outputStream.Flush();
+            if (!reachedEnd)
+                PassThrough(inputStream, outputStream);
+            return;
+        }
+
+        // It is an UdonSharp asset file.
+
+        if (name == null || sourceCsFileId == null)
+        {
+            WriteAndPassThrough();
+            return;
+        }
+
+        ///cSpell:ignore Behaviour
+        outputStream.Write(Encoding.UTF8.GetBytes("%YAML 1.1\n"
+            + "%TAG !u! tag:unity3d.com,2011:\n"
+            + "--- !u!114 &11400000\n"
+            + "MonoBehaviour:\n"
+            + "  m_ObjectHideFlags: 0\n"
+            + "  m_CorrespondingSourceObject: {fileID: 0}\n"
+            + "  m_PrefabInstance: {fileID: 0}\n"
+            + "  m_PrefabAsset: {fileID: 0}\n"
+            + "  m_GameObject: {fileID: 0}\n"
+            + "  m_Enabled: 1\n"
+            + "  m_EditorHideFlags: 0\n"
+            + "  m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}\n"
+            + "  m_Name: " + name + "\n"
+            + "  m_EditorClassIdentifier: \n"
+            + "  serializedUdonProgramAsset: {fileID: 0}\n"
+            + "  udonAssembly: \n"
+            + "  assemblyError: \n"
+            + "  sourceCsScript: {fileID: " + sourceCsFileId + (sourceCsFileId != "0" ? (", guid: " + sourceCsGuid! + ", type: " + sourceCsType!) : "") + "}\n"
+            + "  scriptVersion: 0\n"
+            + "  compiledVersion: 0\n"
+            + "  behaviourSyncMode: 0\n"
+            + "  hasInteractEvent: 0\n"
+            + "  scriptID: 0\n"
+            + "  serializationData:\n"
+            + "    SerializedFormat: 2\n"
+            + "    SerializedBytes: \n"
+            + "    ReferencedUnityObjects: []\n"
+            + "    SerializedBytesString: \n"
+            + "    Prefab: {fileID: 0}\n"
+            + "    PrefabModificationsReferencedUnityObjects: []\n"
+            + "    PrefabModifications: []\n"
+            + "    SerializationNodes:\n"
+            + "    - Name: fieldDefinitions\n"
+            + "      Entry: 6\n"
+            + "      Data: \n"));
+        outputStream.Flush();
     }
 }
