@@ -110,7 +110,10 @@ public class Program
             return 0;
         }
 
-        ///cSpell:ignore tgzip
+        // TODO: Check the first few bytes of the input data to determine if it is:
+        // - a text (yaml) file
+        // - a gzip compressed file
+        // - a xz compressed file
 
         var sevenZip = Process.Start(new ProcessStartInfo()
         {
