@@ -60,3 +60,17 @@ The following are supported by this program:
   smudge = git-lfs smudge -- %f | UdonGitFilters smudge %f
 	required = true
 ```
+
+And then in `.gitattributes` for example:
+
+```
+*.unity filter=unityscene diff=lfs merge=lfs -text
+*.prefab filter=unityprefab diff=lfs merge=lfs -text
+*.asset filter=unityasset merge=unityyamlmerge -text
+```
+
+And then any other `.asset` files that need to be in git lfs should be defined after these lines in order for those to override this filter. I think that's how that works, I've not actually confirmed it 100%.
+
+And since I've mentioned `unityyamlmerge` here, look at this if you'd like: https://docs.unity3d.com/Manual/SmartMerge.html
+
+Though I'll be honest, whenever I've personally had to merge scene or prefab files using this tool, while it resolves the merge conflicts, the resulting scenes or prefabs have hardly been usable for me. It might work for some very minor merges, but any substantial ones and it'll likely either break the prefab by having "2 root objects", or make it so hard to understand what exactly needs manual attention and how that it's easier to just redo the changes that were attempted to be merged manually.
