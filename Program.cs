@@ -77,12 +77,13 @@ namespace UdonGitFilters
             bool useCompression = args is [_, "--use-compression", ..];
             bool hasDoubleDash = useCompression ? args is [_, _, "--", ..] : args is [_, "--", ..];
             int expectedArgsCount = 2 + (useCompression ? 1 : 0) + (hasDoubleDash ? 1 : 0);
-            if (args.Length < expectedArgsCount)
+            if (args.Length != expectedArgsCount)
             {
                 Console.Error.WriteLine("Requires at least 2 arguments: 'smudge'/'clean' and the file path "
                     + "(use '%f' (without the quotes) if the command is defined in the git config file).\n"
                     + "Optionally '--use-compression' can be specified immediately after 'smudge'/'clean', before the file path.\n"
-                    + "Accepts a '--' as an args separator before the file path.");
+                    + "Accepts a '--' as an args separator before the file path.\n"
+                    + "Additional unused arguments are disallowed.");
                 return 1;
             }
             switch (args[0])

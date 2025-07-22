@@ -54,16 +54,16 @@ The following are supported by this program:
 
 ```
 [filter "unityasset"] # For .asset files, specifically detecting and handling udon graph and udon sharp asset files.
-  clean = UdonGitFilters clean %f
-  smudge = UdonGitFilters smudge %f
+  clean = UdonGitFilters clean -- %f
+  smudge = UdonGitFilters smudge -- %f
 	required = true
 [filter "unityscene"] # For .unity files, setting serializedProgramAsset references to none and running it through 7z using xz compression format.
-  clean = UdonGitFilters clean --use-compression %f | git-lfs clean -- %f
-  smudge = git-lfs smudge -- %f | UdonGitFilters smudge --use-compression %f
+  clean = UdonGitFilters clean --use-compression -- %f | git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f | UdonGitFilters smudge --use-compression -- %f
 	required = true
 [filter "unityprefab"] # For .prefab files, setting serializedProgramAsset references to none.
-  clean = UdonGitFilters clean %f | git-lfs clean -- %f
-  smudge = git-lfs smudge -- %f | UdonGitFilters smudge %f
+  clean = UdonGitFilters clean -- %f | git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f | UdonGitFilters smudge -- %f
 	required = true
 ```
 
