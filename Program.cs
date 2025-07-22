@@ -74,19 +74,23 @@ namespace UdonGitFilters
 
         public static int Main(string[] args)
         {
-            if (args.Length < 2)
+            bool useCompression = args is [_, "--use-compression", ..];
+            bool hasDoubleDash = useCompression ? args is [_, _, "--", ..] : args is [_, "--", ..];
+            int expectedArgsCount = 2 + (useCompression ? 1 : 0) + (hasDoubleDash ? 1 : 0);
+            if (args.Length < expectedArgsCount)
             {
-                Console.Error.WriteLine("Requires 2 arguments. 'smudge'/'clean' and the file path.\n"
-                    + "Optionally '--use-compression' can be specified before the file path.");
+                Console.Error.WriteLine("Requires at least 2 arguments: 'smudge'/'clean' and the file path "
+                    + "(use '%f' (without the quotes) if the command is defined in the git config file).\n"
+                    + "Optionally '--use-compression' can be specified immediately after 'smudge'/'clean', before the file path.\n"
+                    + "Accepts a '--' as an args separator before the file path.");
                 return 1;
             }
-            bool useCompression = args is [_, "--use-compression", _, ..];
             switch (args[0])
             {
                 case "smudge":
-                    return Smudge(args[useCompression ? 2 : 1], useCompression);
+                    return Smudge(args[expectedArgsCount - 1], useCompression);
                 case "clean":
-                    return Clean(args[useCompression ? 2 : 1], useCompression);
+                    return Clean(args[expectedArgsCount - 1], useCompression);
                 default:
                     Console.Error.WriteLine($"Invalid first argument '{args[0]}', expected 'smudge'/'clean'.");
                     return 1;
