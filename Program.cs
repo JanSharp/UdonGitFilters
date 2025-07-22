@@ -73,28 +73,21 @@ namespace UdonGitFilters
         {
             if (args.Length < 2)
             {
-                Console.Error.WriteLine("Requires 2 arguments. 'smudge'/'clean' and the file path.");
+                Console.Error.WriteLine("Requires 2 arguments. 'smudge'/'clean' and the file path.\n"
+                    + "Optionally '--use-compression' can be specified before the file path.");
                 return 1;
             }
+            bool useCompression = args is [_, "--use-compression", _, ..];
             switch (args[0])
             {
                 case "smudge":
-                    return Smudge(args[1]);
+                    return Smudge(args[useCompression ? 2 : 1], useCompression);
                 case "clean":
-                    return Clean(args[1]);
+                    return Clean(args[useCompression ? 2 : 1], useCompression);
                 default:
                     Console.Error.WriteLine($"Invalid first argument '{args[0]}', expected 'smudge'/'clean'.");
                     return 1;
             }
-        }
-
-        private static bool ShouldCompress(string path)
-        {
-            return Path.GetExtension(path) switch
-            {
-                ".unity" => true,
-                _ => false,
-            };
         }
 
         private static bool ShouldRemoveReferences(string path)
@@ -163,13 +156,16 @@ namespace UdonGitFilters
             process.Close();
         }
 
-        private static int Smudge(string path)
+        private static int Smudge(string path, bool useCompression)
         {
-            if (!ShouldCompress(path))
-            {
-                FromInputToOutput(PassThrough);
-                return 0;
-            }
+            _ = path; // The path is no longer being used, however for simplicity of the interface
+            // and for future proofing, keep it as a requirement anyway.
+            _ = useCompression; // This is also unused in order to support changing the git filter
+            // used by a file from using compression to not using compression, and still being able
+            // to checkout files from history without issue. Because I think git uses the .gitattributes
+            // from the work tree in order to determine what filters to run on a file when checking it
+            // out, even if the .gitattributes for that file were different at the commit it is being
+            // checked out from.
 
             using var inputStream = new PeekStream(Console.OpenStandardInput());
             byte[] header = new byte[6];
@@ -233,9 +229,9 @@ namespace UdonGitFilters
                 : PassThrough;
         }
 
-        private static int Clean(string path)
+        private static int Clean(string path, bool useCompression)
         {
-            if (!ShouldCompress(path))
+            if (!useCompression)
             {
                 FromInputToOutput(GetCleanProcessor(path));
                 return 0;
