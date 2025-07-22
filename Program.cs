@@ -24,11 +24,11 @@ namespace UdonGitFilters
                 return count;
             if (reachedEnd)
                 return bufferedBytes.Count == 0 && count != 0 ? -1 : bufferedBytes.Count;
-            int secondaryBufferSize = Math.Min(1024 * 1024, count - bufferedBytes.Count);
-            byte[] secondaryBuffer = new byte[secondaryBufferSize];
+            int GetClampedMissingByteCount() => Math.Min(1024 * 1024, count - bufferedBytes.Count);
+            byte[] secondaryBuffer = new byte[GetClampedMissingByteCount()];
             while (bufferedBytes.Count < count)
             {
-                int countReadIntoBuffer = underlyingStream.Read(secondaryBuffer, 0, secondaryBufferSize);
+                int countReadIntoBuffer = underlyingStream.Read(secondaryBuffer, 0, GetClampedMissingByteCount());
                 if (countReadIntoBuffer < 0)
                 {
                     reachedEnd = true;
