@@ -23,13 +23,13 @@ namespace UdonGitFilters
             if (bufferedBytes.Count >= count)
                 return count;
             if (reachedEnd)
-                return bufferedBytes.Count == 0 && count != 0 ? -1 : bufferedBytes.Count;
+                return bufferedBytes.Count;
             int GetClampedMissingByteCount() => Math.Min(1024 * 1024, count - bufferedBytes.Count);
             byte[] secondaryBuffer = new byte[GetClampedMissingByteCount()];
             while (bufferedBytes.Count < count)
             {
                 int countReadIntoBuffer = underlyingStream.Read(secondaryBuffer, 0, GetClampedMissingByteCount());
-                if (countReadIntoBuffer < 0)
+                if (countReadIntoBuffer <= 0)
                 {
                     reachedEnd = true;
                     break;
@@ -39,7 +39,7 @@ namespace UdonGitFilters
                 for (int i = 0; i < countReadIntoBuffer; i++)
                     bufferedBytes.Add(secondaryBuffer[i]);
             }
-            return reachedEnd && bufferedBytes.Count == 0 && count != 0 ? -1 : Math.Min(count, bufferedBytes.Count);
+            return bufferedBytes.Count;
         }
 
         public override int Read(byte[] buffer, int offset, int count)
