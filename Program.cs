@@ -1,7 +1,64 @@
 ﻿using System.Diagnostics;
-using System.Net.Mime;
 using System.Text;
 using System.Text.RegularExpressions;
+
+public class PeekStream(Stream baseStream) : Stream
+{
+    public Stream underlyingStream = baseStream;
+    private readonly List<byte> bufferedBytes = [];
+    private bool reachedEnd;
+
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotImplementedException();
+    public override long Position { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+    public int Peek(byte[] buffer, int count)
+    {
+        bufferedBytes.CopyTo(0, buffer, 0, Math.Min(count, bufferedBytes.Count));
+        if (bufferedBytes.Count >= count)
+            return count;
+        if (reachedEnd)
+            return bufferedBytes.Count == 0 && count != 0 ? -1 : bufferedBytes.Count;
+        int secondaryBufferSize = Math.Min(1024 * 1024, count - bufferedBytes.Count);
+        byte[] secondaryBuffer = new byte[secondaryBufferSize];
+        while (bufferedBytes.Count < count)
+        {
+            int countReadIntoBuffer = underlyingStream.Read(secondaryBuffer, 0, secondaryBufferSize);
+            if (countReadIntoBuffer < 0)
+            {
+                reachedEnd = true;
+                break;
+            }
+            Buffer.BlockCopy(secondaryBuffer, 0, buffer, bufferedBytes.Count, countReadIntoBuffer);
+            for (int i = 0; i < countReadIntoBuffer; i++)
+                bufferedBytes.Add(secondaryBuffer[i]);
+        }
+        return reachedEnd && bufferedBytes.Count == 0 && count != 0 ? -1 : Math.Min(count, bufferedBytes.Count);
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        if (bufferedBytes.Count == 0)
+            return underlyingStream.Read(buffer, offset, count);
+        int bufferedCount = Math.Min(count, bufferedBytes.Count);
+        bufferedBytes.CopyTo(0, buffer, offset, bufferedCount);
+        bufferedBytes.RemoveRange(0, bufferedCount);
+        return bufferedCount;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        underlyingStream.Dispose();
+        base.Dispose(disposing);
+    }
+
+    public override void Flush() => throw new NotImplementedException();
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotImplementedException();
+    public override void SetLength(long value) => throw new NotImplementedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotImplementedException();
+}
 
 public class Program
 {
@@ -66,19 +123,19 @@ public class Program
         }
     }
 
-    private static void FromInputToOutput(Action<Stream, Stream> processor)
+    private static void FromInputToOutput(Action<Stream, Stream> processor, Stream? inputStream = null)
     {
-        using var input = Console.OpenStandardInput();
+        using var input = inputStream ?? Console.OpenStandardInput();
         using var output = Console.OpenStandardOutput();
         processor(input, output);
         output.Flush();
     }
 
-    private static void WrapProcess(Process process, Action<Stream, Stream> inputProcessor)
+    private static void WrapProcess(Process process, Action<Stream, Stream> inputProcessor, Stream? inputStream = null)
     {
         var inputTask = Task.Run(() =>
         {
-            using var input = Console.OpenStandardInput();
+            using var input = inputStream ?? Console.OpenStandardInput();
             inputProcessor(input, process.StandardInput.BaseStream);
             process.StandardInput.BaseStream.Flush();
             process.StandardInput.BaseStream.Close();
@@ -112,10 +169,32 @@ public class Program
             return 0;
         }
 
-        // TODO: Check the first few bytes of the input data to determine if it is:
-        // - a text (yaml) file
-        // - a gzip compressed file
-        // - a xz compressed file
+        using var inputStream = new PeekStream(Console.OpenStandardInput());
+        byte[] header = new byte[6];
+        header[5] = 0xff; // To make the xz array pattern match fail if only 5 bytes were read.
+        inputStream.Peek(header, 6);
+
+        int WrapSevenZip(string compressionType)
+        {
+            var sevenZip = Process.Start(new ProcessStartInfo()
+            {
+                FileName = "7z",
+                ArgumentList = { "x", "-si", "-so", "-an", $"-t{compressionType}" },
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+            });
+            if (sevenZip == null)
+            {
+                Console.Error.WriteLine($"Failed to start 7z (seven zip) process.");
+                return 1;
+            }
+            WrapProcess(sevenZip, PassThrough, inputStream);
+            return 0;
+        }
+
+        ///cSpell:ignore bbbccccc, NOTIMPL
 
         // https://iamhow.com/Technical_Notes/File_headers.html
         // Zip (.zip) format description, starts with 0x50, 0x4b, 0x03, 0x04 (unless empty — then the last two are 0x05, 0x06 or 0x06, 0x06)
@@ -124,23 +203,25 @@ public class Program
         // zlib (.zz) format description, starts with (in bits) 0aaa1000 bbbccccc, where ccccc is chosen so that the first byte times 256 plus the second byte is a multiple of 31.
         // compress (.Z) starts with 0x1f, 0x9d
 
-        var sevenZip = Process.Start(new ProcessStartInfo()
+        switch (header)
         {
-            FileName = "7z",
-            ArgumentList = { "x", "-si", "-so", "-an", "-txz" },
-            CreateNoWindow = true,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-        });
-        if (sevenZip == null)
-        {
-            Console.Error.WriteLine($"Failed to start 7z (seven zip) process.");
-            return 1;
+            case [0x50, 0x4b, 0x03, 0x04, ..]
+                or [0x50, 0x4b, 0x05, 0x06, ..]
+                or [0x50, 0x4b, 0x06, 0x06, ..]:
+                // 7z does not actually have an implementation for this? It says:
+                // ERROR:
+                // Cannot open the file as archive
+                //
+                // E_NOTIMPL : Not implemented
+                return WrapSevenZip("zip");
+            case [0x1f, 0x8b, 0x08, ..]:
+                return WrapSevenZip("gzip");
+            case [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, ..]:
+                return WrapSevenZip("xz");
+            default: // Assume text.
+                FromInputToOutput(PassThrough, inputStream);
+                return 0;
         }
-
-        WrapProcess(sevenZip, PassThrough);
-        return 0;
     }
 
     private static Action<Stream, Stream> GetCleanProcessor(string path)
