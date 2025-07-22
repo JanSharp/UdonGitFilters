@@ -687,7 +687,7 @@ public class Program
             + "  m_GameObject: {fileID: 0}\n"
             + "  m_Enabled: 1\n"
             + "  m_EditorHideFlags: 0\n"
-            + "  m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}\n"
+            + "  m_Script: {fileID: 11500000, guid: " + UdonSharpScriptGuid + ", type: 3}\n"
             + "  m_Name: " + name + "\n"
             + "  m_EditorClassIdentifier: \n"
             + "  serializedUdonProgramAsset: {fileID: 0}\n"
