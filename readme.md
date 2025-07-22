@@ -11,11 +11,13 @@ For udon graph asset, scene and prefab files the references to serialized udon p
 
 ## Compression
 
-When the `--use-compression` argument is set, files get compressed by running them through `7z` (seven zip) using the `xz` compression format.
+When the `--use-compression` argument is set, files >=10 mebibytes get compressed by running them through `7z` (seven zip) using the `xz` compression format.
 
-**Important:** Only use compression if really necessary. Compression is not deterministic across platforms nor implementations of the same compression format.
+**Important:** Only use compression if really necessary. Compression is not deterministic across platforms nor implementations of the same compression format. This can and will lead to situations where checking out a file makes it immediately show up as modified again, simply because it compressed differently on the local machine using the currently installed version of `7z`. Especially noticeable when collaborating with other people (which is kind of what git is good at and used for).
 
-This can and will lead to situations where checking out a file makes it immediately show up as modified again, simply because it compressed differently on the local machine using the currently installed version of `7z`. Especially noticeable when collaborating with other people (which is kind of what git is good at and used for).
+This is also the reason why it is hard coded to only compress files >=10 mebibytes, so it can be enabled for scene files and prefab files and it will only actually compress the files that need it. The vast majority of prefabs are smaller than 10 MiB, same for test or demo scenes. Therefore this would mainly compresses the main and big scene files.
+
+Though truthfully even then I would recommend only enabling compression if prefab or scene files are reaching hundreds of MiB, and you would like to reduce the amount of storage these files are taking up on github/gitlab to reduce costs.
 
 ## Seven Zip
 

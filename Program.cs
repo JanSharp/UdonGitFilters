@@ -16,9 +16,10 @@ namespace UdonGitFilters
         public override long Length => throw new NotImplementedException();
         public override long Position { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
-        public int Peek(byte[] buffer, int count)
+        public int Peek(byte[]? buffer, int count)
         {
-            bufferedBytes.CopyTo(0, buffer, 0, Math.Min(count, bufferedBytes.Count));
+            if (buffer != null)
+                bufferedBytes.CopyTo(0, buffer, 0, Math.Min(count, bufferedBytes.Count));
             if (bufferedBytes.Count >= count)
                 return count;
             if (reachedEnd)
@@ -33,7 +34,8 @@ namespace UdonGitFilters
                     reachedEnd = true;
                     break;
                 }
-                Buffer.BlockCopy(secondaryBuffer, 0, buffer, bufferedBytes.Count, countReadIntoBuffer);
+                if (buffer != null)
+                    Buffer.BlockCopy(secondaryBuffer, 0, buffer, bufferedBytes.Count, countReadIntoBuffer);
                 for (int i = 0; i < countReadIntoBuffer; i++)
                     bufferedBytes.Add(secondaryBuffer[i]);
             }
@@ -66,6 +68,7 @@ namespace UdonGitFilters
     {
         private const int BufferSize = 1024 * 1024;
         private const int AssetBufferSize = 128 * 1024;
+        private const int CompressionFileSizeThreshold = 10 * 1024 * 1024;
         private const string UdonGraphScriptGuid = "4f11136daadff0b44ac2278a314682ab";
         private const string UdonSharpScriptGuid = "c333ccfdd0cbdbc4ca30cef2dd6e6b9b";
 
@@ -237,6 +240,13 @@ namespace UdonGitFilters
                 return 0;
             }
 
+            using var inputStream = new PeekStream(Console.OpenStandardInput());
+            if (inputStream.Peek(null, CompressionFileSizeThreshold) != CompressionFileSizeThreshold)
+            {
+                FromInputToOutput(GetCleanProcessor(path), inputStream);
+                return 0;
+            }
+
             var sevenZip = Process.Start(new ProcessStartInfo()
             {
                 FileName = "7z",
@@ -252,7 +262,7 @@ namespace UdonGitFilters
                 return 1;
             }
 
-            WrapProcess(sevenZip, GetCleanProcessor(path));
+            WrapProcess(sevenZip, GetCleanProcessor(path), inputStream);
             return 0;
         }
 
