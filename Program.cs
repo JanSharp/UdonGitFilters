@@ -76,14 +76,16 @@ public class Program
 
     private static void WrapProcess(Process process, Action<Stream, Stream> inputProcessor)
     {
-        var inputTask = Task.Run(() => {
+        var inputTask = Task.Run(() =>
+        {
             using var input = Console.OpenStandardInput();
             inputProcessor(input, process.StandardInput.BaseStream);
             process.StandardInput.BaseStream.Flush();
             process.StandardInput.BaseStream.Close();
         });
 
-        var outputTask = Task.Run(() => {
+        var outputTask = Task.Run(() =>
+        {
             using var output = Console.OpenStandardOutput();
             byte[] buffer = new byte[BufferSize];
             while (true)
@@ -118,7 +120,7 @@ public class Program
         var sevenZip = Process.Start(new ProcessStartInfo()
         {
             FileName = "7z",
-            ArgumentList = {"x", "-si", "-so", "-an", "-txz"},
+            ArgumentList = { "x", "-si", "-so", "-an", "-txz" },
             CreateNoWindow = true,
             UseShellExecute = false,
             RedirectStandardInput = true,
@@ -152,7 +154,7 @@ public class Program
         var sevenZip = Process.Start(new ProcessStartInfo()
         {
             FileName = "7z",
-            ArgumentList = {"a", "-si", "-so", "-an", "-txz"},
+            ArgumentList = { "a", "-si", "-so", "-an", "-txz" },
             CreateNoWindow = true,
             UseShellExecute = false,
             RedirectStandardInput = true,
@@ -290,11 +292,20 @@ public class Program
             if (!TestNext((byte)':'))
                 return false;
             ReadWhiteSpace();
-            if (!TestNextOneOrMore(b => b switch {
-                    (byte)'0' => true, (byte)'1' => true, (byte)'2' => true, (byte)'3' => true, (byte)'4' => true,
-                    (byte)'5' => true, (byte)'6' => true, (byte)'7' => true, (byte)'8' => true, (byte)'9' => true,
-                    _ => false,
-                }))
+            if (!TestNextOneOrMore(b => b switch
+            {
+                (byte)'0' => true,
+                (byte)'1' => true,
+                (byte)'2' => true,
+                (byte)'3' => true,
+                (byte)'4' => true,
+                (byte)'5' => true,
+                (byte)'6' => true,
+                (byte)'7' => true,
+                (byte)'8' => true,
+                (byte)'9' => true,
+                _ => false,
+            }))
                 return false;
             ReadWhiteSpace();
             if (!TestNext((byte)','))
@@ -306,13 +317,32 @@ public class Program
             if (!TestNext((byte)':'))
                 return false;
             ReadWhiteSpace();
-            if (!TestNextOneOrMore(b => b switch {
-                    (byte)'0' => true, (byte)'1' => true, (byte)'2' => true, (byte)'3' => true, (byte)'4' => true,
-                    (byte)'5' => true, (byte)'6' => true, (byte)'7' => true, (byte)'8' => true, (byte)'9' => true,
-                    (byte)'a' => true, (byte)'b' => true, (byte)'c' => true, (byte)'d' => true, (byte)'e' => true, (byte)'f' => true,
-                    (byte)'A' => true, (byte)'B' => true, (byte)'C' => true, (byte)'D' => true, (byte)'E' => true, (byte)'F' => true,
-                    _ => false,
-                }))
+            if (!TestNextOneOrMore(b => b switch
+            {
+                (byte)'0' => true,
+                (byte)'1' => true,
+                (byte)'2' => true,
+                (byte)'3' => true,
+                (byte)'4' => true,
+                (byte)'5' => true,
+                (byte)'6' => true,
+                (byte)'7' => true,
+                (byte)'8' => true,
+                (byte)'9' => true,
+                (byte)'a' => true,
+                (byte)'b' => true,
+                (byte)'c' => true,
+                (byte)'d' => true,
+                (byte)'e' => true,
+                (byte)'f' => true,
+                (byte)'A' => true,
+                (byte)'B' => true,
+                (byte)'C' => true,
+                (byte)'D' => true,
+                (byte)'E' => true,
+                (byte)'F' => true,
+                _ => false,
+            }))
                 return false;
             ReadWhiteSpace();
             if (!TestNext((byte)','))
@@ -324,11 +354,20 @@ public class Program
             if (!TestNext((byte)':'))
                 return false;
             ReadWhiteSpace();
-            if (!TestNextOneOrMore(b => b switch {
-                    (byte)'0' => true, (byte)'1' => true, (byte)'2' => true, (byte)'3' => true, (byte)'4' => true,
-                    (byte)'5' => true, (byte)'6' => true, (byte)'7' => true, (byte)'8' => true, (byte)'9' => true,
-                    _ => false,
-                }))
+            if (!TestNextOneOrMore(b => b switch
+            {
+                (byte)'0' => true,
+                (byte)'1' => true,
+                (byte)'2' => true,
+                (byte)'3' => true,
+                (byte)'4' => true,
+                (byte)'5' => true,
+                (byte)'6' => true,
+                (byte)'7' => true,
+                (byte)'8' => true,
+                (byte)'9' => true,
+                _ => false,
+            }))
                 return false;
             ReadWhiteSpace();
             if (!TestNext((byte)'}'))
@@ -339,7 +378,7 @@ public class Program
         byte[] startWord = Encoding.UTF8.GetBytes("serializedProgramAsset");
         int startWordIndex = 0;
 
-        byte[] utf8bom = [ 0xef, 0xbb, 0xbf ];
+        byte[] utf8bom = [0xef, 0xbb, 0xbf];
         foreach (byte b in utf8bom)
         {
             // If this breaks out in the middle of a utf8 BOM then the parser should technically restart from the beginning.
@@ -417,7 +456,7 @@ public class Program
 
         int i = 0;
 
-        byte[] utf8bom = [ 0xef, 0xbb, 0xbf ];
+        byte[] utf8bom = [0xef, 0xbb, 0xbf];
         if (inputSize >= 3 && inputBuffer[0] == utf8bom[0] && inputBuffer[1] == utf8bom[1] && inputBuffer[2] == utf8bom[2])
             i = 3;
         byte[] yamlHeader = Encoding.UTF8.GetBytes("%YAML");
