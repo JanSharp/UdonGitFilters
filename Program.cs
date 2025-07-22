@@ -206,17 +206,19 @@ namespace UdonGitFilters
 
             switch (header)
             {
-                case [0x50, 0x4b, 0x03, 0x04, ..]
-                    or [0x50, 0x4b, 0x05, 0x06, ..]
-                    or [0x50, 0x4b, 0x06, 0x06, ..]:
-                    // 7z does not actually have an implementation for this? It says:
-                    // ERROR:
-                    // Cannot open the file as archive
-                    //
-                    // E_NOTIMPL : Not implemented
-                    return WrapSevenZip("zip");
-                case [0x1f, 0x8b, 0x08, ..]:
-                    return WrapSevenZip("gzip");
+                // 'zip' compression type was never used by this program, nor does it even work apparently.
+                // But I am keeping it here just for the headers and for the explanation how it is broken.
+                // case [0x50, 0x4b, 0x03, 0x04, ..]
+                //     or [0x50, 0x4b, 0x05, 0x06, ..]
+                //     or [0x50, 0x4b, 0x06, 0x06, ..]:
+                //     // 7z does not actually have an implementation for this? It says:
+                //     // ERROR:
+                //     // Cannot open the file as archive
+                //     //
+                //     // E_NOTIMPL : Not implemented
+                //     return WrapSevenZip("zip");
+                case [0x1f, 0x8b, 0x08, ..]: // This program used gzip in the past,
+                    return WrapSevenZip("gzip"); // this is required for backwards compatibility.
                 case [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, ..]:
                     return WrapSevenZip("xz");
                 default: // Assume text.
