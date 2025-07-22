@@ -117,6 +117,13 @@ public class Program
         // - a gzip compressed file
         // - a xz compressed file
 
+        // https://iamhow.com/Technical_Notes/File_headers.html
+        // Zip (.zip) format description, starts with 0x50, 0x4b, 0x03, 0x04 (unless empty — then the last two are 0x05, 0x06 or 0x06, 0x06)
+        // Gzip (.gz) format description, starts with 0x1f, 0x8b, 0x08
+        // xz (.xz) format description, starts with 0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00
+        // zlib (.zz) format description, starts with (in bits) 0aaa1000 bbbccccc, where ccccc is chosen so that the first byte times 256 plus the second byte is a multiple of 31.
+        // compress (.Z) starts with 0x1f, 0x9d
+
         var sevenZip = Process.Start(new ProcessStartInfo()
         {
             FileName = "7z",
