@@ -53,26 +53,30 @@ Run `git config --global --edit` (I hope you've got a usable text editor defined
 The following are supported by this program:
 
 ```
-[filter "unityasset"] # For .asset files, specifically detecting and handling udon graph and udon sharp asset files.
+[filter "udon-git-filters"]
   clean = UdonGitFilters clean -- %f
   smudge = UdonGitFilters smudge -- %f
 	required = true
-[filter "unityscene"] # For .unity files, setting serializedProgramAsset references to none and running it through 7z using xz compression format.
-  clean = UdonGitFilters clean --use-compression -- %f | git-lfs clean -- %f
-  smudge = git-lfs smudge -- %f | UdonGitFilters smudge --use-compression -- %f
+[filter "udon-git-filters-with-compression"]
+  clean = UdonGitFilters clean --use-compression -- %f
+  smudge = UdonGitFilters smudge --use-compression -- %f
 	required = true
-[filter "unityprefab"] # For .prefab files, setting serializedProgramAsset references to none.
+[filter "udon-git-filters-and-lfs"]
   clean = UdonGitFilters clean -- %f | git-lfs clean -- %f
   smudge = git-lfs smudge -- %f | UdonGitFilters smudge -- %f
+	required = true
+[filter "udon-git-filters-with-compression-and-lfs"]
+  clean = UdonGitFilters clean --use-compression -- %f | git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f | UdonGitFilters smudge --use-compression -- %f
 	required = true
 ```
 
 And then in `.gitattributes` for example:
 
 ```
-*.unity filter=unityscene diff=lfs merge=lfs -text
-*.prefab filter=unityprefab diff=lfs merge=lfs -text
-*.asset filter=unityasset merge=unityyamlmerge -text
+*.unity filter=udon-git-filters-and-lfs diff=lfs merge=lfs -text
+*.prefab filter=udon-git-filters-and-lfs diff=lfs merge=lfs -text
+*.asset filter=udon-git-filters merge=unityyamlmerge -text
 ```
 
 And then any other `.asset` files that need to be in git lfs should be defined after these lines in order for those to override this filter. I think that's how that works, I've not actually confirmed it 100%.
