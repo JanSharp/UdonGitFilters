@@ -378,6 +378,48 @@ namespace UdonGitFilters
                 return true;
             }
 
+            bool DecimalDigitCondition(byte b) => b switch
+            {
+                (byte)'0' => true,
+                (byte)'1' => true,
+                (byte)'2' => true,
+                (byte)'3' => true,
+                (byte)'4' => true,
+                (byte)'5' => true,
+                (byte)'6' => true,
+                (byte)'7' => true,
+                (byte)'8' => true,
+                (byte)'9' => true,
+                _ => false,
+            };
+
+            bool HexDigitCondition(byte b) => b switch
+            {
+                (byte)'0' => true,
+                (byte)'1' => true,
+                (byte)'2' => true,
+                (byte)'3' => true,
+                (byte)'4' => true,
+                (byte)'5' => true,
+                (byte)'6' => true,
+                (byte)'7' => true,
+                (byte)'8' => true,
+                (byte)'9' => true,
+                (byte)'a' => true,
+                (byte)'b' => true,
+                (byte)'c' => true,
+                (byte)'d' => true,
+                (byte)'e' => true,
+                (byte)'f' => true,
+                (byte)'A' => true,
+                (byte)'B' => true,
+                (byte)'C' => true,
+                (byte)'D' => true,
+                (byte)'E' => true,
+                (byte)'F' => true,
+                _ => false,
+            };
+
             bool ReadPattern()
             {
                 // serializedProgramAsset was already matched, so this matches:
@@ -395,20 +437,7 @@ namespace UdonGitFilters
                 if (!TestNext((byte)':'))
                     return false;
                 ReadWhiteSpace();
-                if (!TestNextOneOrMore(b => b switch
-                {
-                    (byte)'0' => true,
-                    (byte)'1' => true,
-                    (byte)'2' => true,
-                    (byte)'3' => true,
-                    (byte)'4' => true,
-                    (byte)'5' => true,
-                    (byte)'6' => true,
-                    (byte)'7' => true,
-                    (byte)'8' => true,
-                    (byte)'9' => true,
-                    _ => false,
-                }))
+                if (!TestNextOneOrMore(DecimalDigitCondition))
                     return false;
                 ReadWhiteSpace();
                 if (!TestNext((byte)','))
@@ -420,32 +449,7 @@ namespace UdonGitFilters
                 if (!TestNext((byte)':'))
                     return false;
                 ReadWhiteSpace();
-                if (!TestNextOneOrMore(b => b switch
-                {
-                    (byte)'0' => true,
-                    (byte)'1' => true,
-                    (byte)'2' => true,
-                    (byte)'3' => true,
-                    (byte)'4' => true,
-                    (byte)'5' => true,
-                    (byte)'6' => true,
-                    (byte)'7' => true,
-                    (byte)'8' => true,
-                    (byte)'9' => true,
-                    (byte)'a' => true,
-                    (byte)'b' => true,
-                    (byte)'c' => true,
-                    (byte)'d' => true,
-                    (byte)'e' => true,
-                    (byte)'f' => true,
-                    (byte)'A' => true,
-                    (byte)'B' => true,
-                    (byte)'C' => true,
-                    (byte)'D' => true,
-                    (byte)'E' => true,
-                    (byte)'F' => true,
-                    _ => false,
-                }))
+                if (!TestNextOneOrMore(HexDigitCondition))
                     return false;
                 ReadWhiteSpace();
                 if (!TestNext((byte)','))
@@ -457,29 +461,13 @@ namespace UdonGitFilters
                 if (!TestNext((byte)':'))
                     return false;
                 ReadWhiteSpace();
-                if (!TestNextOneOrMore(b => b switch
-                {
-                    (byte)'0' => true,
-                    (byte)'1' => true,
-                    (byte)'2' => true,
-                    (byte)'3' => true,
-                    (byte)'4' => true,
-                    (byte)'5' => true,
-                    (byte)'6' => true,
-                    (byte)'7' => true,
-                    (byte)'8' => true,
-                    (byte)'9' => true,
-                    _ => false,
-                }))
+                if (!TestNextOneOrMore(DecimalDigitCondition))
                     return false;
                 ReadWhiteSpace();
                 if (!TestNext((byte)'}'))
                     return false;
                 return true;
             }
-
-            byte[] startWord = Encoding.UTF8.GetBytes("serializedProgramAsset");
-            int startWordIndex = 0;
 
             byte[] utf8bom = [0xef, 0xbb, 0xbf];
             foreach (byte b in utf8bom)
@@ -505,6 +493,9 @@ namespace UdonGitFilters
                 }
                 Write(Next());
             }
+
+            byte[] startWord = Encoding.UTF8.GetBytes("serializedProgramAsset");
+            int startWordIndex = 0;
 
             while (!IsEndOfFile())
             {
