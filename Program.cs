@@ -420,9 +420,9 @@ namespace UdonGitFilters
                 _ => false,
             };
 
-            bool ReadPattern()
+            bool ReadReferencePattern()
             {
-                // serializedProgramAsset was already matched, so this matches:
+                // 'serializedProgramAsset' was already matched, so this matches:
                 // : {fileID: 11400000, guid: 9eb6bf22b7b45af1d8ef5e8652d24b03, type: 2}
                 ReadWhiteSpace();
                 if (!TestNext((byte)':'))
@@ -437,6 +437,7 @@ namespace UdonGitFilters
                 if (!TestNext((byte)':'))
                     return false;
                 ReadWhiteSpace();
+                TestNext((byte)'-'); // fileID can probably be negative for target references for prefab overrides.
                 if (!TestNextOneOrMore(DecimalDigitCondition))
                     return false;
                 ReadWhiteSpace();
@@ -469,6 +470,40 @@ namespace UdonGitFilters
                 return true;
             }
 
+            bool ReadPrefabOverridePattern(out int stopIndexToKeepFromBuffer)
+            {
+                // 'target' was already matched, so this matches:
+                // : {fileID: 8464459589408506562, guid: 8894fa7e4588a5c4fab98453e558847d, type: 3}
+                // propertyPath: serializedProgramAsset
+                // value:
+                // objectReference: {fileID: 11400000, guid: ace92797782a61d3c953f218a67103b9, type: 2}
+                stopIndexToKeepFromBuffer = -1;
+                if (!ReadReferencePattern())
+                    return false;
+                ReadWhiteSpace();
+                if (!TestNextWord(Encoding.UTF8.GetBytes("propertyPath")))
+                    return false;
+                ReadWhiteSpace();
+                if (!TestNext((byte)':'))
+                    return false;
+                ReadWhiteSpace();
+                if (!TestNextWord(Encoding.UTF8.GetBytes("serializedProgramAsset")))
+                    return false;
+                ReadWhiteSpace();
+                if (!TestNextWord(Encoding.UTF8.GetBytes("value")))
+                    return false;
+                ReadWhiteSpace();
+                if (!TestNext((byte)':'))
+                    return false;
+                ReadWhiteSpace();
+                if (!TestNextWord(Encoding.UTF8.GetBytes("objectReference")))
+                    return false;
+                stopIndexToKeepFromBuffer = buffer.Count;
+                if (!ReadReferencePattern())
+                    return false;
+                return true;
+            }
+
             byte[] utf8bom = [0xef, 0xbb, 0xbf];
             foreach (byte b in utf8bom)
             {
@@ -497,28 +532,50 @@ namespace UdonGitFilters
             byte[] startWord = Encoding.UTF8.GetBytes("serializedProgramAsset");
             int startWordIndex = 0;
 
+            byte[] prefabOverrideStartWord = Encoding.UTF8.GetBytes("target");
+            int prefabOverrideStartWordIndex = 0;
+
             while (!IsEndOfFile())
             {
                 byte current = Next();
                 Write(current);
-                if (current != startWord[startWordIndex])
+
+                startWordIndex = current == startWord[startWordIndex] ? startWordIndex + 1 : 0;
+                prefabOverrideStartWordIndex = current == prefabOverrideStartWord[prefabOverrideStartWordIndex] ? prefabOverrideStartWordIndex + 1 : 0;
+
+                if (startWordIndex == startWord.Length)
                 {
                     startWordIndex = 0;
-                    continue;
-                }
-                if ((++startWordIndex) != startWord.Length)
-                    continue;
-                startWordIndex = 0;
-                if (!ReadPattern())
-                {
-                    foreach (byte b in buffer)
-                        Write(b);
+                    if (!ReadReferencePattern())
+                    {
+                        foreach (byte b in buffer)
+                            Write(b);
+                        buffer.Clear();
+                        continue;
+                    }
                     buffer.Clear();
+                    foreach (byte b in Encoding.UTF8.GetBytes(": {fileID: 0}"))
+                        Write(b);
                     continue;
                 }
-                buffer.Clear();
-                foreach (byte b in Encoding.UTF8.GetBytes(": {fileID: 0}"))
-                    Write(b);
+
+                if (prefabOverrideStartWordIndex == prefabOverrideStartWord.Length)
+                {
+                    prefabOverrideStartWordIndex = 0;
+                    if (!ReadPrefabOverridePattern(out int startIndexToKeepFromBuffer))
+                    {
+                        foreach (byte b in buffer)
+                            Write(b);
+                        buffer.Clear();
+                        continue;
+                    }
+                    for (int i = 0; i < startIndexToKeepFromBuffer; i++)
+                        Write(buffer[i]);
+                    buffer.Clear();
+                    foreach (byte b in Encoding.UTF8.GetBytes(": {fileID: 0}"))
+                        Write(b);
+                    continue;
+                }
             }
 
             FlushOutputBuffer();
