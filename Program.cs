@@ -778,6 +778,8 @@ namespace UdonGitFilters
                 return;
             }
 
+            // Last double checked this format on 2025-07-23, VRChat World package version 3.8.2
+
             ///cSpell:ignore Behaviour
             outputStream.Write(Encoding.UTF8.GetBytes("%YAML 1.1\n"
                 + "%TAG !u! tag:unity3d.com,2011:\n"
