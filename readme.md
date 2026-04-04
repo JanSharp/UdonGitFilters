@@ -56,19 +56,19 @@ The following are supported by this program:
 [filter "udon-git-filters"]
   clean = UdonGitFilters clean -- %f
   smudge = UdonGitFilters smudge -- %f
-	required = true
+  required = true
 [filter "udon-git-filters-with-compression"]
   clean = UdonGitFilters clean --use-compression -- %f
   smudge = UdonGitFilters smudge --use-compression -- %f
-	required = true
+  required = true
 [filter "udon-git-filters-and-lfs"]
   clean = UdonGitFilters clean -- %f | git-lfs clean -- %f
   smudge = git-lfs smudge -- %f | UdonGitFilters smudge -- %f
-	required = true
+  required = true
 [filter "udon-git-filters-with-compression-and-lfs"]
   clean = UdonGitFilters clean --use-compression -- %f | git-lfs clean -- %f
   smudge = git-lfs smudge -- %f | UdonGitFilters smudge --use-compression -- %f
-	required = true
+  required = true
 ```
 
 And then in `.gitattributes` for example:
