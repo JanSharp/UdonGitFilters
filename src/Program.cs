@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace UdonGitFilters
 {
-    public class Program
+    public static class Program
     {
         private const int BufferSize = 1024 * 1024;
         private const int AssetBufferSize = 128 * 1024;
@@ -14,28 +14,56 @@ namespace UdonGitFilters
 
         public static int Main(string[] args)
         {
-            bool useCompression = args is [_, "--use-compression", ..];
-            bool hasDoubleDash = useCompression ? args is [_, _, "--", ..] : args is [_, "--", ..];
-            int expectedArgsCount = 2 + (useCompression ? 1 : 0) + (hasDoubleDash ? 1 : 0);
+            const string ExpectedCommands = "'smudge'/'clean'/'filter-process'";
+            if (args.Length == 0)
+            {
+                Console.Error.WriteLine($"Missing first argument, expected {ExpectedCommands}.");
+                return 1;
+            }
+
+            int doubleDashIndex = Array.IndexOf(args, "--");
+            var optionsArgs = args.Take(doubleDashIndex == -1 ? args.Length : doubleDashIndex);
+            bool useCompression = optionsArgs.Contains("--use-compression");
+            bool useTrace = optionsArgs.Contains("--trace");
+            Trace.SetEnabled(useTrace);
+            int validOptionsCount = (useCompression ? 1 : 0) + (useTrace ? 1 : 0);
+
+            if (args[0] == "filter-process")
+            {
+                if (args.Length != 1 + validOptionsCount)
+                {
+                    Console.Error.WriteLine("When the first argument is 'filter-process' then program "
+                        + "only accepts two optional further optional arguments, that being '--use-compression' and '--trace'.");
+                    return 1;
+                }
+                return FilterProcess.Run(useCompression);
+            }
+
+            if (args[0] is not ("smudge" or "clean")) // C# pattern matching is a thing.
+            {
+                Console.Error.WriteLine($"Invalid first argument '{args[0]}', expected {ExpectedCommands}.");
+                return 1;
+            }
+
+            bool hasDoubleDash = doubleDashIndex != -1;
+            int expectedArgsCount = 2 + validOptionsCount + (hasDoubleDash ? 1 : 0);
             if (args.Length != expectedArgsCount)
             {
-                Console.Error.WriteLine("Requires at least 2 arguments: 'smudge'/'clean' and the file path "
+                Console.Error.WriteLine("When the first argument is not 'filter-process' then this program "
+                    + "requires at least 2 arguments: 'smudge'/'clean' and the file path "
                     + "(use '%f' (without the quotes) if the command is defined in the git config file).\n"
-                    + "Optionally '--use-compression' can be specified immediately after 'smudge'/'clean', before the file path.\n"
+                    + "Optionally '--use-compression' and or '--trace' can be specified "
+                    + "immediately after 'smudge'/'clean', before the file path.\n"
                     + "Accepts a '--' as an args separator before the file path.\n"
                     + "Additional unused arguments are disallowed.");
                 return 1;
             }
-            switch (args[0])
+            return args[0] switch
             {
-                case "smudge":
-                    return Smudge(args[expectedArgsCount - 1], useCompression);
-                case "clean":
-                    return Clean(args[expectedArgsCount - 1], useCompression);
-                default:
-                    Console.Error.WriteLine($"Invalid first argument '{args[0]}', expected 'smudge'/'clean'.");
-                    return 1;
-            }
+                "smudge" => Smudge(args[^1], useCompression),
+                "clean" => Clean(args[^1], useCompression),
+                _ => throw new Exception("Impossible, args[0] has been validated previously."),
+            };
         }
 
         private static bool ShouldRemoveReferences(string path)
@@ -53,7 +81,7 @@ namespace UdonGitFilters
             return Path.GetExtension(path) == ".asset";
         }
 
-        private static void PassThrough(Stream inputStream, Stream outputStream)
+        public static void PassThrough(Stream inputStream, Stream outputStream)
         {
             byte[] buffer = new byte[BufferSize];
             while (true)
@@ -172,7 +200,7 @@ namespace UdonGitFilters
             }
         }
 
-        private static Action<Stream, Stream> GetCleanProcessor(string path)
+        public static Action<Stream, Stream> GetCleanProcessor(string path)
         {
             return ShouldRemoveReferences(path) ? RemoveSerializedProgramAssetReferences
                 : IsAsset(path) ? CleanUdonGraphAndUdonSharpAsset

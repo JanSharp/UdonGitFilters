@@ -56,10 +56,12 @@ The following are supported by this program:
 [filter "udon-git-filters"]
   clean = UdonGitFilters clean -- %f
   smudge = UdonGitFilters smudge -- %f
+  process = UdonGitFilters filter-process
   required = true
 [filter "udon-git-filters-with-compression"]
   clean = UdonGitFilters clean --use-compression -- %f
   smudge = UdonGitFilters smudge --use-compression -- %f
+  process = UdonGitFilters filter-process --use-compression
   required = true
 [filter "udon-git-filters-and-lfs"]
   clean = UdonGitFilters clean -- %f | git-lfs clean -- %f
