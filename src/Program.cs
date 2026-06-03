@@ -11,6 +11,7 @@ namespace UdonGitFilters
         private const int CompressionFileSizeThreshold = 10 * 1024 * 1024;
         private const string UdonGraphScriptGuid = "4f11136daadff0b44ac2278a314682ab";
         private const string UdonSharpScriptGuid = "c333ccfdd0cbdbc4ca30cef2dd6e6b9b";
+        private const string SevenZipProcessStartErrorMsg = "Failed to start 7z (seven zip) process.";
 
         public static int Main(string[] args)
         {
@@ -81,7 +82,7 @@ namespace UdonGitFilters
             return Path.GetExtension(path) == ".asset";
         }
 
-        public static void PassThrough(Stream inputStream, Stream outputStream)
+        private static void PassThrough(Stream inputStream, Stream outputStream)
         {
             byte[] buffer = new byte[BufferSize];
             while (true)
@@ -94,35 +95,25 @@ namespace UdonGitFilters
             }
         }
 
-        private static void FromInputToOutput(Action<Stream, Stream> processor, Stream? inputStream = null)
-        {
-            using var input = inputStream ?? Console.OpenStandardInput();
-            using var output = Console.OpenStandardOutput();
-            processor(input, output);
-            output.Flush();
-        }
-
-        private static void WrapProcess(Process process, Action<Stream, Stream> inputProcessor, Stream? inputStream = null)
+        private static void WrapProcess(Process process, Action<Stream, Stream> inputProcessor, Stream inputStream, Stream outputStream)
         {
             var inputTask = Task.Run(() =>
             {
-                using var input = inputStream ?? Console.OpenStandardInput();
-                inputProcessor(input, process.StandardInput.BaseStream);
+                inputProcessor(inputStream, process.StandardInput.BaseStream);
                 process.StandardInput.BaseStream.Flush();
                 process.StandardInput.BaseStream.Close();
             });
 
             var outputTask = Task.Run(() =>
             {
-                using var output = Console.OpenStandardOutput();
                 byte[] buffer = new byte[BufferSize];
                 while (true)
                 {
                     int size = process.StandardOutput.BaseStream.Read(buffer, 0, BufferSize);
                     if (size <= 0)
                         break;
-                    output.Write(buffer, 0, size);
-                    output.Flush();
+                    outputStream.Write(buffer, 0, size);
+                    outputStream.Flush();
                 }
             });
 
@@ -134,6 +125,22 @@ namespace UdonGitFilters
 
         private static int Smudge(string path, bool useCompression)
         {
+            using var input = Console.OpenStandardInput();
+            using var output = Console.OpenStandardOutput();
+            return GetSmudgeProcessor(path, useCompression)(input, output) ? 0 : 1;
+        }
+
+        private static int Clean(string path, bool useCompression)
+        {
+            using var input = Console.OpenStandardInput();
+            using var output = Console.OpenStandardOutput();
+            return GetCleanProcessor(path, useCompression)(input, output) ? 0 : 1;
+        }
+
+        public delegate Func<Stream, Stream, bool> CleanOrSmudgeProcessorGetter(string path, bool useCompression);
+
+        public static Func<Stream, Stream, bool> GetSmudgeProcessor(string path, bool useCompression)
+        {
             _ = path; // The path is no longer being used, however for simplicity of the interface
             // and for future proofing, keep it as a requirement anyway.
             _ = useCompression; // This is also unused in order to support changing the git filter
@@ -142,13 +149,17 @@ namespace UdonGitFilters
             // from the work tree in order to determine what filters to run on a file when checking it
             // out, even if the .gitattributes for that file were different at the commit it is being
             // checked out from.
+            return SmudgeProcessor;
+        }
 
-            using var inputStream = new PeekStream(Console.OpenStandardInput());
+        private static bool SmudgeProcessor(Stream inputStream, Stream outputStream)
+        {
+            using var inputPeekStream = new PeekStream(inputStream);
             byte[] header = new byte[6];
             header[5] = 0xff; // To make the xz array pattern match fail if only 5 bytes were read.
-            inputStream.Peek(header, 6);
+            inputPeekStream.Peek(header, 6);
 
-            int WrapSevenZip(string compressionType)
+            bool WrapSevenZip(string compressionType)
             {
                 var sevenZip = Process.Start(new ProcessStartInfo()
                 {
@@ -161,11 +172,11 @@ namespace UdonGitFilters
                 });
                 if (sevenZip == null)
                 {
-                    Console.Error.WriteLine($"Failed to start 7z (seven zip) process.");
-                    return 1;
+                    Console.Error.WriteLine(SevenZipProcessStartErrorMsg);
+                    return false;
                 }
-                WrapProcess(sevenZip, PassThrough, inputStream);
-                return 0;
+                WrapProcess(sevenZip, PassThrough, inputPeekStream, outputStream);
+                return true;
             }
 
             ///cSpell:ignore bbbccccc, NOTIMPL
@@ -195,31 +206,28 @@ namespace UdonGitFilters
                 case [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, ..]:
                     return WrapSevenZip("xz");
                 default: // Assume text.
-                    FromInputToOutput(PassThrough, inputStream);
-                    return 0;
+                    PassThrough(inputPeekStream, outputStream);
+                    return false;
             }
         }
 
-        public static Action<Stream, Stream> GetCleanProcessor(string path)
+        public static Func<Stream, Stream, bool> GetCleanProcessor(string path, bool useCompression)
         {
-            return ShouldRemoveReferences(path) ? RemoveSerializedProgramAssetReferences
+            Action<Stream, Stream> processor = ShouldRemoveReferences(path) ? RemoveSerializedProgramAssetReferences
                 : IsAsset(path) ? CleanUdonGraphAndUdonSharpAsset
                 : PassThrough;
+            return useCompression
+                ? (i, o) => PotentiallyCompress(processor, i, o)
+                : (i, o) => { processor(i, o); return true; };
         }
 
-        private static int Clean(string path, bool useCompression)
+        private static bool PotentiallyCompress(Action<Stream, Stream> inputProcessor, Stream inputStream, Stream outputStream)
         {
-            if (!useCompression)
+            using var inputPeekStream = new PeekStream(inputStream);
+            if (inputPeekStream.Peek(null, CompressionFileSizeThreshold) != CompressionFileSizeThreshold)
             {
-                FromInputToOutput(GetCleanProcessor(path));
-                return 0;
-            }
-
-            using var inputStream = new PeekStream(Console.OpenStandardInput());
-            if (inputStream.Peek(null, CompressionFileSizeThreshold) != CompressionFileSizeThreshold)
-            {
-                FromInputToOutput(GetCleanProcessor(path), inputStream);
-                return 0;
+                inputProcessor(inputPeekStream, outputStream);
+                return true;
             }
 
             var sevenZip = Process.Start(new ProcessStartInfo()
@@ -233,12 +241,12 @@ namespace UdonGitFilters
             });
             if (sevenZip == null)
             {
-                Console.Error.WriteLine($"Failed to start 7z (seven zip) process.");
-                return 1;
+                Console.Error.WriteLine(SevenZipProcessStartErrorMsg);
+                return false;
             }
 
-            WrapProcess(sevenZip, GetCleanProcessor(path), inputStream);
-            return 0;
+            WrapProcess(sevenZip, inputProcessor, inputPeekStream, outputStream);
+            return true;
         }
 
         private static void RemoveSerializedProgramAssetReferences(Stream inputStream, Stream outputStream)

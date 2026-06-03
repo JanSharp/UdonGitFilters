@@ -7,14 +7,18 @@ namespace UdonGitFilters
         private static readonly Stopwatch sw = new();
         private static double commandStartMs;
 
-        private static string GetCommandFinishedMsg(string command, string pathname)
+        private static string GetCommandSuccessMsg(string command, string pathname)
         {
-            return $"ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {command}, path: {pathname}";
+            return $"success, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {command}, path: {pathname}";
+        }
+
+        private static string GetCommandErrorMsg(string command, string pathname)
+        {
+            return $"error, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {command}, path: {pathname}";
         }
 
         public static int Run(bool useCompression)
         {
-            _ = useCompression; // TODO
             sw.Start();
             using Stream inputStream = Console.OpenStandardInput();
             using Stream outputStream = Console.OpenStandardOutput();
@@ -24,7 +28,7 @@ namespace UdonGitFilters
             while (true)
             {
                 commandStartMs = sw.Elapsed.TotalMilliseconds;
-                if (!TryProcessCommand(inputStream, outputStream, out bool reachedEnd))
+                if (!TryProcessCommand(inputStream, outputStream, useCompression, out bool reachedEnd))
                     return 1;
                 if (reachedEnd)
                 {
@@ -58,7 +62,7 @@ namespace UdonGitFilters
             return true;
         }
 
-        private static bool TryProcessCommand(Stream inputStream, Stream outputStream, out bool reachedEnd)
+        private static bool TryProcessCommand(Stream inputStream, Stream outputStream, bool useCompression, out bool reachedEnd)
         {
             if (!PktLine.TryReadArbitraryKVPPacketList(inputStream, out var pairs, out reachedEnd))
                 return false;
@@ -68,41 +72,56 @@ namespace UdonGitFilters
                 return false;
             return command switch
             {
-                "clean" => TryProcessCleanCommand(inputStream, outputStream, pairs),
-                "smudge" => TryProcessSmudgeCommand(inputStream, outputStream, pairs),
+                "clean" => TryProcessCleanCommand(inputStream, outputStream, useCompression, pairs),
+                "smudge" => TryProcessSmudgeCommand(inputStream, outputStream, useCompression, pairs),
                 _ => false,
             };
         }
 
-        private static bool TryProcessCleanCommand(Stream inputStream, Stream outputStream, List<(string key, string value)> pairs)
+        private static void FinishReadingAndWriteErrorStatus(Stream outputStream, Stream contentsStream)
         {
-            if (!PktLine.TryGetReadSingletonValue(pairs, "pathname", out string pathname))
-                return false;
-            using Stream contentsStream = PktLine.ReadFileContents(inputStream);
-            using MemoryStream resultStream = new();
-            Program.GetCleanProcessor(pathname)(contentsStream, resultStream);
-            resultStream.Position = 0;
-            PktLine.WriteStringPacket(outputStream, "status=success");
+            byte[] buffer = new byte[1024 * 1024];
+            // Must finish reading git's pkt lines before responding, in accordance with the protocol.
+            while (contentsStream.Read(buffer, 0, buffer.Length) != 0)
+            { }
+            PktLine.WriteStringPacket(outputStream, "status=error");
             PktLine.WriteFlushPacket(outputStream);
-            PktLine.WriteFileContents(outputStream, resultStream);
-            PktLine.WriteFlushPacket(outputStream); // No change in status, another flush to confirm.
-            Trace.Info(GetCommandFinishedMsg("clean", pathname));
-            return true;
         }
 
-        private static bool TryProcessSmudgeCommand(Stream inputStream, Stream outputStream, List<(string key, string value)> pairs)
+        private static bool TryProcessCleanCommand(Stream inputStream, Stream outputStream, bool useCompression, List<(string key, string value)> pairs)
+        {
+            return TryProcessCleanOrSmudgeCommand(inputStream, outputStream, useCompression, pairs, "clean", Program.GetCleanProcessor);
+        }
+
+        private static bool TryProcessSmudgeCommand(Stream inputStream, Stream outputStream, bool useCompression, List<(string key, string value)> pairs)
+        {
+            return TryProcessCleanOrSmudgeCommand(inputStream, outputStream, useCompression, pairs, "smudge", Program.GetSmudgeProcessor);
+        }
+
+        private static bool TryProcessCleanOrSmudgeCommand(
+            Stream inputStream,
+            Stream outputStream,
+            bool useCompression,
+            List<(string key, string value)> pairs,
+            string commandName,
+            Program.CleanOrSmudgeProcessorGetter processorGetter)
         {
             if (!PktLine.TryGetReadSingletonValue(pairs, "pathname", out string pathname))
                 return false;
             using Stream contentsStream = PktLine.ReadFileContents(inputStream);
             using MemoryStream resultStream = new();
-            Program.PassThrough(contentsStream, resultStream);
+            if (!processorGetter(pathname, useCompression)(contentsStream, resultStream))
+            {
+                FinishReadingAndWriteErrorStatus(outputStream, contentsStream);
+                Trace.Info(GetCommandErrorMsg(commandName, pathname));
+                return false;
+            }
             resultStream.Position = 0;
             PktLine.WriteStringPacket(outputStream, "status=success");
             PktLine.WriteFlushPacket(outputStream);
             PktLine.WriteFileContents(outputStream, resultStream);
             PktLine.WriteFlushPacket(outputStream); // No change in status, another flush to confirm.
-            Trace.Info(GetCommandFinishedMsg("smudge", pathname));
+            Trace.Info(GetCommandSuccessMsg(commandName, pathname));
             return true;
         }
     }
