@@ -77,6 +77,7 @@ And then in `.gitattributes` for example:
 
 When not using git lfs:
 ```
+# Filters from https://github.com/JanSharp/UdonGitFilters
 *.unity filter=udon-git-filters merge=unityyamlmerge -text
 *.prefab filter=udon-git-filters merge=unityyamlmerge -text
 *.asset filter=udon-git-filters merge=unityyamlmerge -text
@@ -84,6 +85,7 @@ When not using git lfs:
 
 When using git lfs:
 ```
+# Filters from https://github.com/JanSharp/UdonGitFilters
 *.unity filter=udon-git-filters-and-lfs diff=lfs merge=lfs -text
 *.prefab filter=udon-git-filters-and-lfs diff=lfs merge=lfs -text
 *.asset filter=udon-git-filters merge=unityyamlmerge -text
