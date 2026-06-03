@@ -7,16 +7,6 @@ namespace UdonGitFilters
         private static readonly Stopwatch sw = new();
         private static double commandStartMs;
 
-        private static string GetCommandSuccessMsg(string command, string pathname)
-        {
-            return $"success, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {command}, path: {pathname}";
-        }
-
-        private static string GetCommandErrorMsg(string command, string pathname)
-        {
-            return $"error, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {command}, path: {pathname}";
-        }
-
         public static int Run(bool useCompression)
         {
             sw.Start();
@@ -113,7 +103,13 @@ namespace UdonGitFilters
             if (!processorGetter(pathname, useCompression)(contentsStream, resultStream))
             {
                 FinishReadingAndWriteErrorStatus(outputStream, contentsStream);
-                Trace.Info(GetCommandErrorMsg(commandName, pathname));
+                Trace.Info($"error,  ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {commandName}, path: {pathname}");
+                return false;
+            }
+            if (contentsStream.Read(new byte[1], 0, 1) != 0)
+            {
+                FinishReadingAndWriteErrorStatus(outputStream, contentsStream);
+                Trace.Info($"error,  processor did not finish reading, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {commandName}, path: {pathname}");
                 return false;
             }
             resultStream.Position = 0;
@@ -121,7 +117,7 @@ namespace UdonGitFilters
             PktLine.WriteFlushPacket(outputStream);
             PktLine.WriteFileContents(outputStream, resultStream);
             PktLine.WriteFlushPacket(outputStream); // No change in status, another flush to confirm.
-            Trace.Info(GetCommandSuccessMsg(commandName, pathname));
+            Trace.Info($"success, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {commandName}, path: {pathname}");
             return true;
         }
     }

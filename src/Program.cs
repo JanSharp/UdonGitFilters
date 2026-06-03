@@ -802,6 +802,11 @@ namespace UdonGitFilters
                 return;
             }
 
+            // Consume the rest of the input stream, required for the filter-process.
+            // Not required otherwise, but likely still cleaner.
+            while (inputStream.Read(inputBuffer, 0, inputBuffer.Length) != 0)
+            { }
+
             // Last double checked this format on 2025-07-23, VRChat World package version 3.8.2
 
             ///cSpell:ignore Behaviour
