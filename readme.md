@@ -75,6 +75,14 @@ The following are supported by this program:
 
 And then in `.gitattributes` for example:
 
+When not using git lfs:
+```
+*.unity filter=udon-git-filters merge=unityyamlmerge -text
+*.prefab filter=udon-git-filters merge=unityyamlmerge -text
+*.asset filter=udon-git-filters merge=unityyamlmerge -text
+```
+
+When using git lfs:
 ```
 *.unity filter=udon-git-filters-and-lfs diff=lfs merge=lfs -text
 *.prefab filter=udon-git-filters-and-lfs diff=lfs merge=lfs -text
