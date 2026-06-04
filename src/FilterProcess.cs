@@ -24,12 +24,12 @@ namespace UdonGitFilters
                     Trace.Info($"Unexpected error, processed commands: {processedFileCount}, total ms: {sw.Elapsed.TotalMilliseconds:f3}");
                     return 1;
                 }
-                processedFileCount++;
                 if (reachedEnd)
                 {
                     Trace.Info($"Done, processed commands: {processedFileCount}, total ms: {sw.Elapsed.TotalMilliseconds:f3}");
                     return 0;
                 }
+                processedFileCount++;
             }
         }
 
