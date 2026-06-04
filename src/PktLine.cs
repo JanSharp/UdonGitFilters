@@ -53,7 +53,7 @@ namespace UdonGitFilters
             {
                 int readCount = stream.Read(buffer, offset + alreadyRead, count - alreadyRead);
                 if (readCount == 0)
-                    return false;
+                    return reachedEnd; // Returns false if it has already read something, but not enough.
                 alreadyRead += readCount;
                 reachedEnd = false;
             }
@@ -62,10 +62,12 @@ namespace UdonGitFilters
 
         private static bool TryReadPacketLength(Stream stream, out int length, out bool reachedEnd)
         {
-            if (TryReadExactly(stream, lengthDigitsBuffer, 0, 4, out reachedEnd) && TryParsePacketLength(lengthDigitsBuffer, out length))
-                return true;
             length = 0;
-            return false;
+            if (!TryReadExactly(stream, lengthDigitsBuffer, 0, 4, out reachedEnd))
+                return false;
+            if (reachedEnd)
+                return true;
+            return TryParsePacketLength(lengthDigitsBuffer, out length);
         }
 
         public static bool TryReadStringPacket(Stream stream, out string line, out bool isFlushPacket, out bool reachedEnd)
@@ -151,7 +153,7 @@ namespace UdonGitFilters
             value = null!;
             if (!TryReadStringPacket(stream, out string line, out isFlushPacket, out reachedEnd))
                 return false;
-            if (isFlushPacket)
+            if (isFlushPacket || reachedEnd)
                 return true;
             int separatorIndex = line.IndexOf('=');
             if (separatorIndex == -1)

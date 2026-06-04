@@ -15,14 +15,19 @@ namespace UdonGitFilters
             if (!TryHandShake(inputStream, outputStream))
                 return 1;
 
+            int processedFileCount = 0;
             while (true)
             {
                 commandStartMs = sw.Elapsed.TotalMilliseconds;
                 if (!TryProcessCommand(inputStream, outputStream, useCompression, out bool reachedEnd))
+                {
+                    Trace.Info($"Unexpected error, processed commands: {processedFileCount}, total ms: {sw.Elapsed.TotalMilliseconds:f3}");
                     return 1;
+                }
+                processedFileCount++;
                 if (reachedEnd)
                 {
-                    Trace.Info($"Total ms: {sw.Elapsed.TotalMilliseconds:f3}");
+                    Trace.Info($"Done, processed commands: {processedFileCount}, total ms: {sw.Elapsed.TotalMilliseconds:f3}");
                     return 0;
                 }
             }
@@ -88,6 +93,15 @@ namespace UdonGitFilters
             return TryProcessCleanOrSmudgeCommand(inputStream, outputStream, useCompression, pairs, "smudge", Program.GetSmudgeProcessor);
         }
 
+        /// <summary>
+        /// </summary>
+        /// <param name="inputStream"></param>
+        /// <param name="outputStream"></param>
+        /// <param name="useCompression"></param>
+        /// <param name="pairs"></param>
+        /// <param name="commandName"></param>
+        /// <param name="processorGetter"></param>
+        /// <returns><see langword="false"/> if an unhandled error occurred.</returns>
         private static bool TryProcessCleanOrSmudgeCommand(
             Stream inputStream,
             Stream outputStream,
@@ -104,13 +118,13 @@ namespace UdonGitFilters
             {
                 FinishReadingAndWriteErrorStatus(outputStream, contentsStream);
                 Trace.Info($"error,  ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {commandName}, path: {pathname}");
-                return false;
+                return true;
             }
             if (contentsStream.Read(new byte[1], 0, 1) != 0)
             {
                 FinishReadingAndWriteErrorStatus(outputStream, contentsStream);
                 Trace.Info($"error,  processor did not finish reading, ms: {sw.Elapsed.TotalMilliseconds - commandStartMs:f3}, command: {commandName}, path: {pathname}");
-                return false;
+                return true;
             }
             resultStream.Position = 0;
             PktLine.WriteStringPacket(outputStream, "status=success");
